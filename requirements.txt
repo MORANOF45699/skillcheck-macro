@@ -1,0 +1,6 @@
+pydirectinput
+keyboard
+mss
+numpy
+opencv-python
+pillow
