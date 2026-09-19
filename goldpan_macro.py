@@ -33,7 +33,11 @@ ZONE_MAX_DEG = 110          # max zone width (deg) - wider = fade-in garbage
 NEEDLE_MAX_W = 14           # needle wider than this (deg) = garbage
 START_DELAY  = 0.10         # ignore first moments after circle appears (fade-in)
 STABLE_FRAMES= 3            # zone must be identical this many frames before trusting it
-MIN_SPEED    = 20           # deg/sec - needle must really be moving
+MIN_SPEED    = 40           # deg/sec - needle must really be moving
+MAX_SPEED    = 900          # deg/sec - faster than this = measurement garbage, do not act on it
+SPEED_WIN    = 0.10         # sec of needle history used to measure speed
+SPEED_SPAN   = 0.035        # need at least this much history before trusting speed
+MAX_LEAD_DEG = 15           # never aim further ahead of the needle than this
 BLOCK_KEYS   = True         # while minigame is up: ignore physical W/A/S/D (macro presses still pass)
 SAVE_PRESS   = True         # save frame at each press to debug/ (max 60)
 EDGE_MARGIN  = 3            # stay this many deg inside zone edges
@@ -213,7 +217,7 @@ def worker():
     last_t = [prev_f]
     appear_t = 0.0
     zref, zcount = None, 0
-    hist = deque(maxlen=5)      # recent instantaneous speeds
+    hist = deque()              # (time, unwrapped needle angle) over the last SPEED_WIN sec
     blocked = None              # zone we already pressed on (needle freezes there after a press)
     press_t = 0.0
     with mss.mss() as sct:
@@ -260,10 +264,19 @@ def worker():
                         da = (a - prev_a + 180) % 360 - 180
                         if abs(da) > 45 or dt > 0.1:
                             hist.clear()                  # needle jumped (new stage) - restart estimate
-                        else:
-                            hist.append(da / dt)
+                        elif hist:
+                            hist.append((t, hist[-1][1] + da))
+                if not hist:
+                    hist.append((t, a))
                 prev_a, prev_t = a, t
-                speed = float(np.median(hist)) if len(hist) >= 3 else 0.0
+                # speed over a time window, endpoint to endpoint. Per-frame speed is useless here: the
+                # loop runs faster than the game renders, so duplicate frames read 0 and fresh ones 2x+.
+                while hist and t - hist[0][0] > SPEED_WIN:
+                    hist.popleft()
+                span = hist[-1][0] - hist[0][0] if hist else 0.0
+                speed = (hist[-1][1] - hist[0][1]) / span if span >= SPEED_SPAN else 0.0
+                if abs(speed) > MAX_SPEED:
+                    speed = 0.0
 
                 if t - appear_t < START_DELAY:
                     continue
@@ -275,7 +288,8 @@ def worker():
                 if zcount < STABLE_FRAMES:
                     continue
 
-                pred = (a + speed * LEAD_SEC) % 360
+                lead = max(-MAX_LEAD_DEG, min(MAX_LEAD_DEG, speed * LEAD_SEC))
+                pred = (a + lead) % 360
                 if DEBUG:
                     print("needle=%.0f pred=%.0f zone=%s speed=%.0f" % (a, pred, zone, speed))
 
