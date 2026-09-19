@@ -27,6 +27,7 @@ HALF         = 130          # capture half-size around center
 R_IN, R_OUT  = 66, 98       # ring sample radii (black ring between disk and outer circle)
 NEEDLE_MIN   = 130          # needle: min brightness along radius
 ZONE_MEAN    = 45           # zone: mean brightness along radius above this
+ZONE_STRIPE  = 150          # zone: hatch stripes are near-white; background seen through the ring is not
 ZONE_MIN_DEG = 25           # min zone width (deg) - filters mouse cursor / noise
 ZONE_MAX_DEG = 110          # max zone width (deg) - wider = fade-in garbage
 NEEDLE_MAX_W = 14           # needle wider than this (deg) = garbage
@@ -145,7 +146,10 @@ def analyze(g):
         needle = float(np.rad2deg(np.arctan2(np.sin(a).mean(), np.cos(a).mean())) % 360)
 
     # zone = hatched sector (bright mean); close small gaps, circular
-    zm = mean > ZONE_MEAN
+    # hatch = several near-white samples along the radius. The ring is semi-transparent, so bright
+    # background shows through as medium gray - mean alone mistakes that for a zone.
+    bright3 = np.sort(ring, axis=1)[:, -3]          # 3rd brightest sample per angle
+    zm = (mean > ZONE_MEAN) & (bright3 > ZONE_STRIPE)
     k = 5
     ext = np.concatenate([zm[-k:], zm, zm[:k]]).astype(np.uint8)
     ext = cv2.morphologyEx(ext.reshape(1, -1), cv2.MORPH_CLOSE, np.ones((1, k), np.uint8)).ravel()
