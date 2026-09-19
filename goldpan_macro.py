@@ -30,12 +30,13 @@ ZONE_MEAN    = 45           # zone: mean brightness along radius above this
 ZONE_MIN_DEG = 25           # min zone width (deg) - filters mouse cursor / noise
 ZONE_MAX_DEG = 110          # max zone width (deg) - wider = fade-in garbage
 NEEDLE_MAX_W = 14           # needle wider than this (deg) = garbage
-START_DELAY  = 0.30         # ignore first moments after circle appears (fade-in)
-STABLE_FRAMES= 5            # zone must be identical this many frames before trusting it
+START_DELAY  = 0.10         # ignore first moments after circle appears (fade-in)
+STABLE_FRAMES= 3            # zone must be identical this many frames before trusting it
 MIN_SPEED    = 20           # deg/sec - needle must really be moving
 BLOCK_KEYS   = True         # while minigame is up: ignore physical W/A/S/D (macro presses still pass)
 SAVE_PRESS   = True         # save frame at each press to debug/ (max 60)
 EDGE_MARGIN  = 3            # stay this many deg inside zone edges
+SAFE_MARGIN  = 8            # late press (already past center) only if landing point is this far inside zone
 LEAD_SEC     = 0.03         # input latency compensation
 AIM          = 0.5          # where in zone to press: 0.5 = center
 CENTER_TOL   = 4            # deg tolerance around aim point
@@ -295,8 +296,9 @@ def worker():
                 if inside:
                     if abs(off) <= min(max(CENTER_TOL, frame_step), 10):
                         fire = True                                # at aim point
-                    elif not toward and not in_zone(pred, zone, EDGE_MARGIN + 6):
-                        fire = True                                # already past aim, about to leave zone
+                    elif not toward and in_zone(pred, zone, SAFE_MARGIN):
+                        fire = True                                # got ready late, already past center: press NOW while still safely inside
+                    # past center and landing point too close to the edge -> do not press, wait next pass
                 if fire:
                     letter, score, gl = read_letter(g)
                     if letter is None or score < LETTER_CONF:
