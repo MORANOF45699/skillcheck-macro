@@ -222,6 +222,7 @@ def worker():
                 t = time.perf_counter()
                 if True:
                     ST['fps'] = 0.9 * ST['fps'] + 0.1 / max(t - prev_f, 1e-4)
+                frame_dt = min(max(t - prev_f, 0.001), 0.03)   # real time between frames, capped
                 prev_f = t
                 g = cv2.cvtColor(np.array(sct.grab(region)), cv2.COLOR_BGRA2GRAY)
                 r = analyze(g)
@@ -285,13 +286,14 @@ def worker():
                     continue
                 target = (zone[0] + zone[1] * AIM) % 360
                 off = (pred - target + 180) % 360 - 180          # signed distance to aim point
-                frame_step = abs(speed) * max(t - last_t[0], 0.001)
-                last_t[0] = t
+                # half a frame of travel. (old code used time since last *aim attempt*, which was huge
+                #  after a wait -> tolerance blew up -> pressed at zone edge)
+                frame_step = abs(speed) * frame_dt * 0.6
                 inside = in_zone(a, zone, 0) or in_zone(pred, zone, 0)
                 toward = off * speed < 0
                 fire = False
                 if inside:
-                    if abs(off) <= max(CENTER_TOL, frame_step):
+                    if abs(off) <= min(max(CENTER_TOL, frame_step), 10):
                         fire = True                                # at aim point
                     elif not toward and not in_zone(pred, zone, EDGE_MARGIN + 6):
                         fire = True                                # already past aim, about to leave zone
